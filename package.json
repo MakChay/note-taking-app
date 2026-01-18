@@ -1,7 +1,7 @@
 {
   "name": "note-taking-app",
-  "version": "2.0.0",
-  "description": "Enhanced note-taking app with modern UI/UX",
+  "version": "1.0.0",
+  "description": "A full-featured note-taking application",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -12,7 +12,7 @@
     "mongoose": "^7.5.0",
     "cors": "^2.8.5"
   },
-  "devDependencies": {
-    "nodemon": "^3.0.1"
+  "engines": {
+    "node": ">=14.0.0"
   }
 }

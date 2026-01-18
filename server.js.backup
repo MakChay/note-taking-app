@@ -3,12 +3,12 @@ const express = require("express");
 const mongoose = require('mongoose');
 const cors = require('cors');
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = 3001;
 
 // ===== MIDDLEWARE =====
 app.use(cors());
 app.use(express.json());
-app.use(express.static(__dirname));
+app.use(express.static('public'));
 
 // ===== IN-MEMORY STORAGE (FALLBACK) =====
 let memoryNotes = [
@@ -107,10 +107,6 @@ async function connectToMongoDB() {
 connectToMongoDB();
 
 // ===== ROUTES =====
-
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
 
 // 1. Health check endpoint
 app.get("/health", (req, res) => {
@@ -938,7 +934,7 @@ app.use((req, res) => {
 // Start server
 app.listen(PORT, () => {
     console.log("🚀 Smart Notes Server v2.0");
-    console.log(`✅ Server running on port ${PORT}`);
+    console.log("✅ Server running on http://localhost:" + PORT);
     console.log("📊 Database: " + (useMongoDB ? "MongoDB" : "In-Memory"));
     console.log("📡 Health check: http://localhost:" + PORT + "/health");
     console.log("📚 API Docs: http://localhost:" + PORT);
