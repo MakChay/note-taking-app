@@ -1,14 +1,19 @@
-// server.js - Enhanced backend with new features
+// Load environment variables for local development
+require('dotenv').config();
+
 const express = require("express");
 const mongoose = require('mongoose');
 const cors = require('cors');
+const path = require('path');
 const app = express();
+
+// Get port from environment variable or use 3001
 const PORT = process.env.PORT || 3001;
 
 // ===== MIDDLEWARE =====
 app.use(cors());
 app.use(express.json());
-app.use(express.static(__dirname));
+app.use(express.static('.')); // Serve static files from current directory
 
 // ===== IN-MEMORY STORAGE (FALLBACK) =====
 let memoryNotes = [
@@ -37,7 +42,14 @@ let NoteModel;
 // Connect to MongoDB
 async function connectToMongoDB() {
     try {
-        await mongoose.connect('mongodb://localhost:27017/notes_db');
+        // Use environment variable for production, local for development
+        const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/notes_db';
+        
+        await mongoose.connect(mongoURI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+        });
+        
         console.log('✅ Connected to MongoDB');
         
         // Define Note schema
@@ -99,7 +111,11 @@ async function connectToMongoDB() {
         
     } catch (error) {
         console.log('⚠️  MongoDB not available, using in-memory storage');
-        console.log('💡 To use MongoDB, make sure it\'s running on port 27017');
+        console.log('Error details:', error.message);
+        console.log('💡 To use MongoDB Atlas:');
+        console.log('   1. Create free cluster at mongodb.com/cloud/atlas');
+        console.log('   2. Get connection string');
+        console.log('   3. Set MONGODB_URI environment variable');
     }
 }
 
@@ -107,10 +123,6 @@ async function connectToMongoDB() {
 connectToMongoDB();
 
 // ===== ROUTES =====
-
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
 
 // 1. Health check endpoint
 app.get("/health", (req, res) => {
@@ -128,8 +140,12 @@ app.get("/", async (req, res) => {
     let dbType = "In-Memory";
     
     if (useMongoDB) {
-        totalNotes = await NoteModel.countDocuments();
-        dbType = "MongoDB";
+        try {
+            totalNotes = await NoteModel.countDocuments();
+            dbType = "MongoDB";
+        } catch (error) {
+            console.error('Error counting notes:', error);
+        }
     }
     
     res.json({ 
@@ -245,102 +261,6 @@ app.get("/api/notes/:id", async (req, res) => {
             error: "Failed to fetch note"
         });
     }
-});
-
-// Enhanced stats with real-time counting
-app.get("/api/notes/enhanced-stats", async (req, res) => {
-  try {
-      if (useMongoDB) {
-          const [
-              total,
-              pinned,
-              archived,
-              categories,
-              recentNotes,
-              tagStats
-          ] = await Promise.all([
-              NoteModel.countDocuments(),
-              NoteModel.countDocuments({ isPinned: true }),
-              NoteModel.countDocuments({ isArchived: true }),
-              NoteModel.aggregate([
-                  { $group: { _id: "$category", count: { $sum: 1 } } },
-                  { $sort: { count: -1 } }
-              ]),
-              NoteModel.find().sort({ createdAt: -1 }).limit(5),
-              NoteModel.aggregate([
-                  { $unwind: "$tags" },
-                  { $group: { _id: "$tags", count: { $sum: 1 } } },
-                  { $sort: { count: -1 } },
-                  { $limit: 10 }
-              ])
-          ]);
-
-          res.json({
-              success: true,
-              data: {
-                  total,
-                  pinned,
-                  archived,
-                  categories,
-                  recentNotes: recentNotes.length,
-                  activeTags: tagStats.length,
-                  tagStats,
-                  unarchived: total - archived,
-                  avgNotesPerCategory: total / Math.max(categories.length, 1),
-                  lastUpdated: await NoteModel.findOne().sort({ updatedAt: -1 }).select('updatedAt')
-              }
-          });
-      } else {
-          const total = memoryNotes.length;
-          const pinned = memoryNotes.filter(n => n.isPinned).length;
-          const archived = memoryNotes.filter(n => n.isArchived).length;
-          
-          const categoryCount = {};
-          const tagCount = {};
-          
-          memoryNotes.forEach(note => {
-              const category = note.category || 'General';
-              categoryCount[category] = (categoryCount[category] || 0) + 1;
-              
-              if (note.tags) {
-                  note.tags.forEach(tag => {
-                      tagCount[tag] = (tagCount[tag] || 0) + 1;
-                  });
-              }
-          });
-          
-          const categories = Object.entries(categoryCount).map(([name, count]) => ({
-              _id: name,
-              count
-          }));
-          
-          const tagStats = Object.entries(tagCount).map(([name, count]) => ({
-              _id: name,
-              count
-          })).sort((a, b) => b.count - a.count).slice(0, 10);
-
-          res.json({
-              success: true,
-              data: {
-                  total,
-                  pinned,
-                  archived,
-                  categories,
-                  recentNotes: Math.min(memoryNotes.length, 5),
-                  activeTags: tagStats.length,
-                  tagStats,
-                  unarchived: total - archived,
-                  avgNotesPerCategory: total / Math.max(categories.length, 1),
-                  lastUpdated: memoryNotes.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0]?.updatedAt || null
-              }
-          });
-      }
-  } catch (error) {
-      res.status(500).json({
-          success: false,
-          error: "Failed to get enhanced statistics"
-      });
-  }
 });
 
 // 5. Create a new note
@@ -938,16 +858,14 @@ app.use((req, res) => {
 // Start server
 app.listen(PORT, () => {
     console.log("🚀 Smart Notes Server v2.0");
-    console.log(`✅ Server running on port ${PORT}`);
+    console.log("✅ Server running on http://localhost:" + PORT);
     console.log("📊 Database: " + (useMongoDB ? "MongoDB" : "In-Memory"));
     console.log("📡 Health check: http://localhost:" + PORT + "/health");
     console.log("📚 API Docs: http://localhost:" + PORT);
     console.log("\n📋 Enhanced Features:");
-    console.log("   • Pagination support");
-    console.log("   • Bulk operations");
-    console.log("   • Export/Import functionality");
-    console.log("   • Statistics dashboard");
-    console.log("   • Advanced search");
-    console.log("   • Category filtering");
+    console.log("   • MongoDB Atlas support");
+    console.log("   • Mobile-friendly frontend");
+    console.log("   • Full CRUD operations");
+    console.log("   • Pin/Archive functionality");
     console.log("\nPress Ctrl+C to stop the server");
 });

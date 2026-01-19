@@ -9,4 +9,6 @@ services:
         value: production
       - key: PORT
         value: 10000
+      - key: MONGODB_URI
+        sync: false  # You'll set this in Render dashboard
     healthCheckPath: /health
